@@ -1,0 +1,14 @@
+# ItemQuickDrop 配置文件
+# 修改后在控制台输入 ItemQuickDrop_Reload() 重载
+
+# 总开关 (true/false)
+enabled = true
+
+# 调试模式 (true/false) - 输出详细日志
+debug = false
+
+# 按 F 操作1个物品
+key_single = F
+
+# 按 Shift+F 操作整组物品
+key_stack = SHIFT+F

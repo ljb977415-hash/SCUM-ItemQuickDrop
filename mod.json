@@ -1,13 +1,6 @@
 {
   "name": "ItemQuickDrop",
-  "description": "Quick drop/pickup items with hotkeys in inventory/container UI.",
-  "default_settings": {
-    "enabled": true,
-    "debug": false,
-    "key_single": "F",
-    "key_stack": "SHIFT+F"
-  },
+  "description": "SCUM mod: Quick drop/pickup items with hotkeys in inventory UI.",
   "mod_package": "ItemQuickDrop",
-  "mod_version": "1.3.0",
-  "uit_example_version": "v3"
+  "mod_version": "1.4.0"
 }
