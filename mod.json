@@ -1,0 +1,13 @@
+{
+  "name": "ItemQuickDrop",
+  "description": "Quick drop/pickup items with hotkeys in inventory/container UI.",
+  "default_settings": {
+    "enabled": true,
+    "debug": false,
+    "key_single": "F",
+    "key_stack": "SHIFT+F"
+  },
+  "mod_package": "ItemQuickDrop",
+  "mod_version": "1.3.0",
+  "uit_example_version": "v3"
+}
