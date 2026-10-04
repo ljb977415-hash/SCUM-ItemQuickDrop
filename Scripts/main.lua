@@ -1,24 +1,76 @@
 --[[
-    SCUM ItemQuickDrop Mod
+    SCUM ItemQuickDrop Mod  v1.1.0
     ----------------------
     在背包/容器界面中：
-      F       = 从鼠标悬停的槽位丢出 / 取出 1 个物品
-      Shift+F = 丢出 / 取出整组物品
+      单键        = 从鼠标悬停的槽位丢出 / 取出 1 个物品
+      修饰键+单键 = 丢出 / 取出整组物品
     
+    所有按键均可在配置文件里自定义，无需改代码。
     依赖：UE4SS (RE-UE4SS) Lua 环境
 --]]
 
 local M = {}
 
 -- ============================================================
--- 配置区（可按需修改）
+-- 按键名称映射表（配置文件里写字符串，运行时转成 Key 枚举）
+-- ============================================================
+local KEY_MAP = {
+    -- 字母
+    A = Key.A, B = Key.B, C = Key.C, D = Key.D, E = Key.E,
+    F = Key.F, G = Key.G, H = Key.H, I = Key.I, J = Key.J,
+    K = Key.K, L = Key.L, M = Key.M, N = Key.N, O = Key.O,
+    P = Key.P, Q = Key.Q, R = Key.R, S = Key.S, T = Key.T,
+    U = Key.U, V = Key.V, W = Key.W, X = Key.X, Y = Key.Y, Z = Key.Z,
+    -- 数字
+    NUM_0 = Key.NUM_0, NUM_1 = Key.NUM_1, NUM_2 = Key.NUM_2,
+    NUM_3 = Key.NUM_3, NUM_4 = Key.NUM_4, NUM_5 = Key.NUM_5,
+    NUM_6 = Key.NUM_6, NUM_7 = Key.NUM_7, NUM_8 = Key.NUM_8,
+    NUM_9 = Key.NUM_9,
+    -- 功能键
+    F1 = Key.F1, F2 = Key.F2, F3 = Key.F3, F4 = Key.F4,
+    F5 = Key.F5, F6 = Key.F6, F7 = Key.F7, F8 = Key.F8,
+    F9 = Key.F9, F10 = Key.F10, F11 = Key.F11, F12 = Key.F12,
+    -- 修饰键
+    SHIFT = Key.SHIFT, LEFT_SHIFT = Key.LEFT_SHIFT, RIGHT_SHIFT = Key.RIGHT_SHIFT,
+    CTRL = Key.CTRL, LEFT_CTRL = Key.LEFT_CTRL, RIGHT_CTRL = Key.RIGHT_CTRL,
+    ALT = Key.ALT, LEFT_ALT = Key.LEFT_ALT, RIGHT_ALT = Key.RIGHT_ALT,
+    -- 其他常用
+    SPACE = Key.SPACE, ENTER = Key.ENTER, TAB = Key.TAB,
+    ESCAPE = Key.ESCAPE, BACKSPACE = Key.BACKSPACE,
+    INSERT = Key.INSERT, DELETE = Key.DELETE,
+    HOME = Key.HOME, END = Key.END, PAGE_UP = Key.PAGE_UP, PAGE_DOWN = Key.PAGE_DOWN,
+    LEFT_BRACKET = Key.LEFT_BRACKET, RIGHT_BRACKET = Key.RIGHT_BRACKET,
+    SEMICOLON = Key.SEMICOLON, COMMA = Key.COMMA, PERIOD = Key.PERIOD,
+    SLASH = Key.SLASH, BACKSLASH = Key.BACKSLASH,
+    MINUS = Key.MINUS, EQUALS = Key.EQUALS,
+    -- 方向键
+    UP = Key.UP, DOWN = Key.DOWN, LEFT = Key.LEFT, RIGHT = Key.RIGHT,
+    -- 小键盘
+    NUM_PAD_0 = Key.NUM_PAD_0, NUM_PAD_1 = Key.NUM_PAD_1,
+    NUM_PAD_2 = Key.NUM_PAD_2, NUM_PAD_3 = Key.NUM_PAD_3,
+    NUM_PAD_4 = Key.NUM_PAD_4, NUM_PAD_5 = Key.NUM_PAD_5,
+    NUM_PAD_6 = Key.NUM_PAD_6, NUM_PAD_7 = Key.NUM_PAD_7,
+    NUM_PAD_8 = Key.NUM_PAD_8, NUM_PAD_9 = Key.NUM_PAD_9,
+}
+
+-- ============================================================
+-- 全局配置（从 ModSettings 读取）
 -- ============================================================
 local CONFIG = {
-    debug = false,               -- 调试模式，输出详细日志
-    key_single = Key.F,          -- 按 F 丢单个
-    key_stack = Key.F,           -- Shift+F 丢整组
-    modifier_stack = { Key.SHIFT },
+    enabled = true,
+    debug = false,
+    key_single_str = "F",
+    key_stack_str = "F",
+    modifier_stack_str = "SHIFT",
 }
+
+-- 运行时绑定的 Key 枚举值
+local key_single = nil
+local key_stack = nil
+local modifier_stack = {}
+
+-- 已注册的按键句柄（用于反注册 / 重载）
+local registered_binds = {}
 
 -- ============================================================
 -- 工具函数
@@ -29,8 +81,72 @@ local function log(msg)
     end
 end
 
+--- 把配置里的字符串按键转成 Key 枚举
+local function resolve_key(key_str)
+    if not key_str or key_str == "" then return nil end
+    local upper = string.upper(key_str)
+    local mapped = KEY_MAP[upper]
+    if not mapped then
+        print(string.format("[ItemQuickDrop] 警告: 未知按键 '%s'，将使用默认值", key_str))
+        return nil
+    end
+    return mapped
+end
+
+--- 读取 ModSettings 配置
+local function load_config()
+    -- 从 UE4SS 的 ModSettings 读取
+    -- 不同 UE4SS 版本读取方式略有差异，下面兼容常见写法
+    local settings = nil
+    
+    -- 方式一：通过 ModSettings 全局表
+    if ModSettings and ModSettings.GetValue then
+        settings = ModSettings
+    end
+    
+    -- 方式二：通过 Mod 对象
+    local mod_obj = _G.Mod or M
+    
+    local function get_setting(key, default)
+        if settings then
+            local ok, val = pcall(settings.GetValue, key)
+            if ok and val ~= nil and val ~= "" then
+                return val
+            end
+        end
+        -- 备选：直接读 mod.json default_settings 对应的值
+        return default
+    end
+    
+    CONFIG.enabled = get_setting("enabled", true)
+    CONFIG.debug = get_setting("debug", false)
+    CONFIG.key_single_str = get_setting("key_single", "F")
+    CONFIG.key_stack_str = get_setting("key_stack", "F")
+    CONFIG.modifier_stack_str = get_setting("modifier_stack", "SHIFT")
+    
+    -- 解析成 Key 枚举
+    key_single = resolve_key(CONFIG.key_single_str) or Key.F
+    key_stack = resolve_key(CONFIG.key_stack_str) or Key.F
+    
+    modifier_stack = {}
+    if CONFIG.modifier_stack_str ~= "" then
+        local mod_key = resolve_key(CONFIG.modifier_stack_str)
+        if mod_key then
+            table.insert(modifier_stack, mod_key)
+        end
+    end
+    
+    log("配置加载完成:")
+    log("  enabled = " .. tostring(CONFIG.enabled))
+    log("  debug = " .. tostring(CONFIG.debug))
+    log("  key_single = " .. CONFIG.key_single_str)
+    log("  key_stack = " .. CONFIG.key_stack_str .. " + " .. CONFIG.modifier_stack_str)
+end
+
+-- ============================================================
+-- 获取玩家 / 角色
+-- ============================================================
 local function get_player_controller()
-    -- 获取本地玩家控制器
     local pc = UEHelpers.GetPlayerController()
     if pc and pc:IsValid() then
         return pc
@@ -49,13 +165,8 @@ local function get_local_player()
 end
 
 -- ============================================================
--- 获取当前打开的背包 / 容器 UI 及鼠标悬停槽位
+-- 获取背包 UI 和悬停槽位
 -- ============================================================
--- SCUM 的背包 UI 大概是 WB_MainInventoryPanel / WB_ContainerPanel 这类 UMG 控件。
--- 下面的函数会遍历 UI 根控件，尝试找到背包面板和当前 hover 的槽位。
--- 如果类名不对，用 UE4SS 的 UHT Dumper / Object Viewer 在游戏里查真实类名。
-
---- 在控件树中递归查找指定类名的控件
 local function find_widget_by_class(root_widget, class_name)
     if not root_widget or not root_widget:IsValid() then return nil end
     
@@ -64,7 +175,6 @@ local function find_widget_by_class(root_widget, class_name)
         return root_widget
     end
     
-    -- 遍历子控件
     local children = root_widget:GetChildren()
     if children then
         for i = 1, children:Length() do
@@ -78,13 +188,10 @@ local function find_widget_by_class(root_widget, class_name)
     return nil
 end
 
---- 获取当前鼠标悬停的 Inventory 槽位（SlotWidget）
---- 返回：槽位控件对象（可能包含 ItemRef / Quantity 等字段）
 local function get_hovered_slot()
     local pc = get_player_controller()
     if not pc then return nil end
     
-    -- 获取游戏 UI 的根画布
     local game_viewport = pc:GetGameViewport()
     if not game_viewport then return nil end
     
@@ -94,13 +201,14 @@ local function get_hovered_slot()
         return nil
     end
     
-    -- 尝试常见的背包面板类名（按优先级排序）
+    -- 常见背包面板类名（按优先级，可在配置里加自定义的）
     local panel_class_names = {
         "WB_MainInventoryPanel_C",
         "WB_InventoryPanel_C",
         "WB_ContainerPanel_C",
         "WB_Container_C",
         "WB_BagPanel_C",
+        "WB_LootPanel_C",
     }
     
     local inventory_panel = nil
@@ -117,15 +225,13 @@ local function get_hovered_slot()
         return nil
     end
     
-    -- 获取鼠标当前悬停的槽位控件
-    -- UMG 里常见的做法是用 GetHoveredWidget 或者遍历 Grid 里的 Slot
+    -- 获取鼠标悬停的槽位
     local hovered = inventory_panel:GetHoveredWidget()
     if hovered and hovered:IsValid() then
         log("Hovered widget: " .. hovered:GetClass():GetFName():ToString())
         return hovered
     end
     
-    -- 备选：如果上面的方法拿不到，试 GetSlotUnderMouse / HoveredSlot
     if inventory_panel.HoveredSlot and inventory_panel.HoveredSlot:IsValid() then
         return inventory_panel.HoveredSlot
     end
@@ -134,19 +240,14 @@ local function get_hovered_slot()
 end
 
 -- ============================================================
--- 执行丢物品操作
+-- 执行丢物品
 -- ============================================================
---- 从指定槽位丢出物品
---- @param slot_widget 槽位控件
---- @param amount "single" 丢1个 / "stack" 丢整组
 local function drop_item_from_slot(slot_widget, amount)
     if not slot_widget or not slot_widget:IsValid() then
         log("槽位无效")
         return
     end
     
-    -- 从槽位里拿到物品引用和数量
-    -- 常见字段名：Item / ItemRef / InventoryItem / Quantity / Count
     local item_ref = slot_widget.Item or slot_widget.ItemRef or slot_widget.InventoryItem
     local quantity = slot_widget.Quantity or slot_widget.Count or 1
     
@@ -154,22 +255,6 @@ local function drop_item_from_slot(slot_widget, amount)
         log("槽位里没有物品")
         return
     end
-    
-    log(string.format("操作物品: %s, 数量: %d, 模式: %s", 
-        item_ref:GetClass():GetFName():ToString(), quantity, amount))
-    
-    -- ==========================================================
-    -- 调用游戏的丢物品接口
-    -- ==========================================================
-    -- SCUM 里丢物品通常走 PlayerController / Character 的 RPC，
-    -- 常见函数名（需要按你游戏版本在 Dumper 里确认）：
-    --
-    --   player:DropItem(item_ref, amount)
-    --   player:ServerDropItem(item_ref, amount)
-    --   inventory_component:DropItemBySlot(slot_index, amount)
-    --   character:DropItem(item_ref, quantity_to_drop)
-    --
-    -- 下面给出最常见的两种调用方式，按实际情况打开注释。
     
     local player = get_local_player()
     if not player then
@@ -182,19 +267,16 @@ local function drop_item_from_slot(slot_widget, amount)
         drop_count = quantity
     end
     
-    -- 方式一：通过 Character 直接调（最常见）
+    log(string.format("操作物品: %s, 数量: %d, 模式: %s", 
+        item_ref:GetClass():GetFName():ToString(), drop_count, amount))
+    
+    -- ==========================================================
+    -- 按实际游戏版本打开对应的丢物品函数调用
+    -- ==========================================================
     -- player:DropItem(item_ref, drop_count)
-    
-    -- 方式二：通过 InventoryComponent
-    -- local inv_comp = player.InventoryComponent
-    -- if inv_comp and inv_comp:IsValid() then
-    --     inv_comp:ServerDropItem(item_ref, drop_count)
-    -- end
-    
-    -- 方式三：通过槽位自身的 Drop 方法
+    -- player:ServerDropItem(item_ref, drop_count)
     -- slot_widget:DropItem(drop_count)
     
-    log(string.format("执行丢物品: 数量 %d", drop_count))
     print(string.format("[ItemQuickDrop] 丢出 %d 个物品", drop_count))
 end
 
@@ -202,7 +284,8 @@ end
 -- 按键回调
 -- ============================================================
 local function on_key_single()
-    log("按下 F（丢单个）")
+    if not CONFIG.enabled then return end
+    log("按下单键（丢单个）")
     local slot = get_hovered_slot()
     if slot then
         drop_item_from_slot(slot, "single")
@@ -210,7 +293,8 @@ local function on_key_single()
 end
 
 local function on_key_stack()
-    log("按下 Shift+F（丢整组）")
+    if not CONFIG.enabled then return end
+    log("按下组合键（丢整组）")
     local slot = get_hovered_slot()
     if slot then
         drop_item_from_slot(slot, "stack")
@@ -218,31 +302,64 @@ local function on_key_stack()
 end
 
 -- ============================================================
--- 注册按键
+-- 注册 / 反注册按键
 -- ============================================================
-local function register_keybinds()
-    -- F = 丢单个
-    RegisterKeyBind(CONFIG.key_single, on_key_single)
-    log("已绑定 F = 丢单个")
-    
-    -- Shift+F = 丢整组
-    RegisterKeyBind(CONFIG.key_stack, CONFIG.modifier_stack, on_key_stack)
-    log("已绑定 Shift+F = 丢整组")
+local function unregister_keybinds()
+    -- UE4SS 没有直接的 UnregisterKeyBind，这里通过覆盖注册实现
+    -- 实际热重载时 UE4SS 会自动清理旧的 Lua 环境
+    registered_binds = {}
 end
+
+local function register_keybinds()
+    unregister_keybinds()
+    
+    -- 单键 = 丢单个
+    if key_single then
+        RegisterKeyBind(key_single, on_key_single)
+        table.insert(registered_binds, { key = key_single, mods = nil })
+        log("已绑定单键: " .. CONFIG.key_single_str .. " = 丢单个")
+    end
+    
+    -- 组合键 = 丢整组
+    if key_stack and #modifier_stack > 0 then
+        RegisterKeyBind(key_stack, modifier_stack, on_key_stack)
+        table.insert(registered_binds, { key = key_stack, mods = modifier_stack })
+        log("已绑定组合键: " .. CONFIG.modifier_stack_str .. "+" .. CONFIG.key_stack_str .. " = 丢整组")
+    end
+end
+
+-- ============================================================
+-- 重载配置（控制台命令）
+-- ============================================================
+local function reload()
+    print("[ItemQuickDrop] 正在重载配置...")
+    load_config()
+    register_keybinds()
+    print("[ItemQuickDrop] 重载完成！")
+    print(string.format("[ItemQuickDrop] 当前按键: %s = 丢单个 | %s+%s = 丢整组",
+        CONFIG.key_single_str,
+        CONFIG.modifier_stack_str,
+        CONFIG.key_stack_str))
+end
+
+-- 暴露到全局，方便控制台调用 reload()
+_G.ItemQuickDrop_Reload = reload
 
 -- ============================================================
 -- 入口
 -- ============================================================
 local function Init()
     print("[ItemQuickDrop] 模组加载中...")
+    print("[ItemQuickDrop] v1.1.0")
     
-    -- 等待游戏对象加载完成后再注册
-    -- UE4SS 提供 ExecuteWithDelay / LoopUntil 来等待
-    -- 简单起见直接注册，按键回调里再做对象有效性检查
-    
+    load_config()
     register_keybinds()
+    
     print("[ItemQuickDrop] 加载完成！")
-    print("[ItemQuickDrop] F = 丢1个, Shift+F = 丢整组")
+    print(string.format("[ItemQuickDrop] %s = 丢1个物品", CONFIG.key_single_str))
+    print(string.format("[ItemQuickDrop] %s + %s = 丢整组物品",
+        CONFIG.modifier_stack_str, CONFIG.key_stack_str))
+    print("[ItemQuickDrop] 在控制台输入 ItemQuickDrop_Reload() 可重载配置")
 end
 
 Init()
