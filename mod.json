@@ -1,0 +1,14 @@
+{
+  "name": "ItemQuickDrop",
+  "description": "Press F to drop one item from hovered slot, Shift+F to drop whole stack.",
+  "default_settings": {
+    "enabled": true,
+    "key_single": "F",
+    "key_stack": "F",
+    "modifier_stack": "SHIFT",
+    "debug": false
+  },
+  "mod_package": "ItemQuickDrop",
+  "mod_version": "1.0.0",
+  "uit_example_version": "v3"
+}
