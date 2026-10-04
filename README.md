@@ -1,22 +1,22 @@
 # SCUM - ItemQuickDrop
 
-SCUM（人渣）UE4SS 客户端 Mod。在背包或容器界面里，鼠标指向物品时按快捷键快速丢出 / 取出物品。
+SCUM（人渣）UE4SS 客户端 Mod。在背包或容器界面里，鼠标指向物品时按快捷键快速操作。
 
-## 功能
+## 功能（双向模式）
 
-| 快捷键 | 效果 |
-|--------|------|
-| 单键（默认 `F`） | 从鼠标悬停的槽位丢出 **1 个**物品 |
-| 修饰键 + 单键（默认 `Shift + F`） | 从鼠标悬停的槽位丢出 **整组**物品 |
+| 鼠标悬停位置 | 单键（默认 `F`） | 修饰键+单键（默认 `Shift+F`） |
+|-------------|------------------|-------------------------------|
+| **自己背包里的物品** | 丢出 1 个到地上 | 丢出整组到地上 |
+| **箱子/容器/尸体里的物品** | 拾取 1 个到自己背包 | 拾取整组到自己背包 |
 
-所有按键均可在配置文件里自定义，无需改代码。
+智能判断：你鼠标放在哪边，就执行哪边对应的操作，不用切换模式。
 
 ---
 
 ## 安装
 
-1. 先安装 [UE4SS (RE-UE4SS)](https://docs.ue4ss.com/) 到 SCUM 游戏目录
-2. 把本 mod 的文件夹放到 `SCUM/Binaries/Win64/Mods/ItemQuickDrop/`
+1. 安装 [UE4SS (RE-UE4SS)](https://docs.ue4ss.com/) 到 SCUM 游戏目录
+2. 把 `ItemQuickDrop` 文件夹放到 `SCUM/Binaries/Win64/Mods/`
 3. 目录结构：
    ```
    Mods/
@@ -25,19 +25,13 @@ SCUM（人渣）UE4SS 客户端 Mod。在背包或容器界面里，鼠标指向
        └── Scripts/
            └── main.lua
    ```
-4. 启动游戏，按 `F10` 打开 UE4SS 控制台，看到 `[ItemQuickDrop] 加载完成！` 就 OK
+4. 进游戏按 `F10` 打开控制台，看到 `[ItemQuickDrop] 加载完成！` 即成功
 
 ---
 
 ## 配置文件自定义按键
 
-### 配置文件位置
-
-第一次启动后，UE4SS 会在 `Mods/Config/` 下生成配置文件（通常是 `ItemQuickDrop.ini`）。
-
-也可以直接编辑 `mod.json` 里的 `default_settings`，首次启动会写入配置文件。
-
-### 可配置项
+编辑 `mod.json` 的 `default_settings`，或改 `Mods/Config/ItemQuickDrop.ini`：
 
 ```json
 {
@@ -51,46 +45,42 @@ SCUM（人渣）UE4SS 客户端 Mod。在背包或容器界面里，鼠标指向
 
 | 配置项 | 说明 | 默认值 |
 |--------|------|--------|
-| `enabled` | 总开关，`true` / `false` | `true` |
-| `debug` | 调试模式，输出详细日志 | `false` |
-| `key_single` | 丢单个物品的按键 | `F` |
-| `key_stack` | 丢整组物品的主按键 | `F` |
-| `modifier_stack` | 丢整组的修饰键（`SHIFT` / `CTRL` / `ALT`） | `SHIFT` |
+| `enabled` | 总开关 | `true` |
+| `debug` | 调试日志 | `false` |
+| `key_single` | 单键（操作1个） | `F` |
+| `key_stack` | 组合键的主按键 | `F` |
+| `modifier_stack` | 组合键的修饰键 | `SHIFT` |
 
-### 支持的按键名称
+### 支持的按键
 
-- **字母**：`A` ~ `Z`
-- **数字**：`NUM_0` ~ `NUM_9`
-- **功能键**：`F1` ~ `F12`
-- **修饰键**：`SHIFT` / `CTRL` / `ALT`（也支持 `LEFT_SHIFT` / `RIGHT_SHIFT` 等）
-- **常用键**：`SPACE`、`ENTER`、`TAB`、`ESCAPE`、`BACKSPACE`、`INSERT`、`DELETE`、`HOME`、`END`、`PAGE_UP`、`PAGE_DOWN`
-- **方向键**：`UP`、`DOWN`、`LEFT`、`RIGHT`
-- **小键盘**：`NUM_PAD_0` ~ `NUM_PAD_9`
+- 字母 `A`~`Z`
+- 数字 `NUM_0`~`NUM_9`
+- 功能键 `F1`~`F12`
+- 修饰键 `SHIFT` / `CTRL` / `ALT`
+- 方向键、小键盘、空格、回车等
 
-### 修改后生效
+### 改完生效
 
-改完配置后，有两种方式生效：
-
-1. **重载 mod**：在 UE4SS 控制台（`F10`）输入：
-   ```lua
-   ItemQuickDrop_Reload()
-   ```
-2. **重启游戏**
+控制台（`F10`）输入：
+```lua
+ItemQuickDrop_Reload()
+```
 
 ---
 
-## 调试 / 适配说明
+## 调试 / 适配
 
-SCUM 不同版本的 UI 类名和内部函数名可能有差异。按 `F` 没反应时：
+SCUM 不同版本 UI 类名可能不同。按 `F` 没反应时：
 
-1. 把配置里的 `debug` 改成 `true`，重载
-2. 进游戏打开背包，按 F，看控制台输出的类名
-3. 在 `main.lua` 的 `panel_class_names` 列表里，把真实的背包面板类名加到最前面
-4. 在 `drop_item_from_slot()` 里，按实际的丢物品函数名打开对应的调用注释
+1. `debug` 设为 `true`，重载
+2. 打开背包按 F，看控制台输出的类名
+3. 在 `main.lua` 的 `PANEL_CLASS_NAMES` 里，把真实类名加到对应列表最前面
+4. 在 `drop_item_to_world()` 和 `pickup_item_to_player()` 里，按实际 RPC 函数名打开调用注释
 
 ---
 
 ## 版本历史
 
-- **v1.1.0** — 配置文件自定义按键、动态重载、按键名称映射表
+- **v1.2.0** — 双向模式：背包物品丢弃、容器物品拾取，自动判断
+- **v1.1.0** — 配置文件自定义按键、动态重载
 - **v1.0.0** — 初始版本
